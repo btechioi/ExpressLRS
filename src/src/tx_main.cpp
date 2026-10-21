@@ -44,8 +44,14 @@ void sendMAVLinkTelemetryToBackpack(uint8_t *) {}
 #endif
 
 /// define some libs to use ///
+#if defined(TARGET_TX)
+// Both link roles are compiled when both TARGET_RX and TARGET_TX are defined
+// (dual-band operation).  The RX half of this file is excluded in RX-only
+// builds, and the TX half is excluded in TX-only builds.
 MSP msp;
+#if defined(TARGET_TX)
 TxConfig config;
+#endif
 Stream *TxUSB;
 
 // Variables / constants for Airport //
@@ -337,7 +343,11 @@ static bool ICACHE_RAM_ATTR ProcessDownlinkPacket(SX12xxDriverCommon::rx_status 
 
 expresslrs_tlm_ratio_e ICACHE_RAM_ATTR UpdateTlmRatioEffective()
 {
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   expresslrs_tlm_ratio_e ratioConfigured = (expresslrs_tlm_ratio_e)config.GetTlm();
+#else
+  expresslrs_tlm_ratio_e ratioConfigured = TLM_RATIO_NO_TLM;
+#endif
   // default is suggested rate for TLM_RATIO_STD/TLM_RATIO_DISARMED
   expresslrs_tlm_ratio_e retVal = ExpressLRS_currAirRate_Modparams->TLMinterval;
   bool updateTelemDenom = true;
@@ -383,9 +393,13 @@ expresslrs_tlm_ratio_e ICACHE_RAM_ATTR UpdateTlmRatioEffective()
 
 void ICACHE_RAM_ATTR GenerateSyncPacketData(OTA_Sync_s * const syncPtr)
 {
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   const uint8_t SwitchEncMode = config.GetSwitchMode();
   const uint8_t Index = (syncSpamCounter) ? config.GetRate() : ExpressLRS_currAirRate_Modparams->index;
-
+#else
+  const uint8_t SwitchEncMode = 0;
+  const uint8_t Index = ExpressLRS_currAirRate_Modparams->index;
+#endif
   if (syncSpamCounter)
     --syncSpamCounter;
 
@@ -406,12 +420,16 @@ void ICACHE_RAM_ATTR GenerateSyncPacketData(OTA_Sync_s * const syncPtr)
   syncPtr->switchEncMode = SwitchEncMode;
   syncPtr->newTlmRatio = newTlmRatio - TLM_RATIO_NO_TLM;
   syncPtr->geminiMode = inGeminiMode();
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   syncPtr->otaProtocol = config.GetLinkMode();
+#endif
   syncPtr->UID4 = UID[4];
   syncPtr->UID5 = UID[5];
 
   // For model match, the last byte of the binding ID is XORed with the inverse of the modelId
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   if (!InBindingMode && config.GetModelMatch())
+#endif
   {
     syncPtr->UID5 ^= (~crsfTransmitter.modelId) & MODELMATCH_MASK;
   }
@@ -437,7 +455,11 @@ void SetRFLinkRate(uint8_t index) // Set speed of RF link
   expresslrs_rf_pref_params_s *const RFperf = get_elrs_RFperfParams(index);
   // Binding always uses invertIQ
   bool invertIQ = InBindingMode || (UID[5] & 0x01);
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   OtaSwitchMode_e newSwitchMode = (OtaSwitchMode_e)config.GetSwitchMode();
+#else
+  OtaSwitchMode_e newSwitchMode = smWideOr8ch;
+#endif
 
   bool subGHz = FHSSconfig->freq_center < 1000000000;
 #if defined(RADIO_LR1121) || defined(RADIO_LR2021)
@@ -456,7 +478,7 @@ void SetRFLinkRate(uint8_t index) // Set speed of RF link
 
   DBGLN("set rate %u", index);
   uint32_t interval = ModParams->interval;
-#if defined(DEBUG_FREQ_CORRECTION) && defined(RADIO_SX128X)
+#if defined(DEBUG_FREQ_CORRECTION) && defined(RADIO_SX128X) && !defined(RADIO_SX127X)
   interval = interval * 12 / 10; // increase the packet interval by 20% to allow adding packet header
 #endif
   hwTimer::updateInterval(interval);
@@ -468,7 +490,7 @@ void SetRFLinkRate(uint8_t index) // Set speed of RF link
 
   Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, FHSSgetInitialFreq(),
                ModParams->PreambleLen, invertIQ, ModParams->PayloadLength
-#if defined(RADIO_SX128X)
+#if defined(RADIO_SX128X) && !defined(RADIO_SX127X)
                , OtaGetUidSeed(), OtaCrcInitializer, ModParams->radio_type
 #elif defined(RADIO_LR1121) || defined(RADIO_LR2021)
                , ModParams->radio_type, (uint8_t)UID[5], (uint8_t)UID[4]
@@ -526,14 +548,16 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
   {
     // The tx is in Mavlink mode and without a valid crsf or RC input.  Do not send stale or fake zero packet RC!
     // Only send SYNC and DATA packets.
+#if defined(TARGET_TX) && !defined(TARGET_RX)
     if (config.GetLinkMode() == TX_MAVLINK_MODE)
     {
       dontSendChannelData = true;
     }
-    else
+#else
     {
       return;
     }
+#endif
   }
 
   busyTransmitting = true;
@@ -543,7 +567,11 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
   WORD_ALIGNED_ATTR OTA_Packet_s otaPkt = {0};
   static uint8_t syncSlot;
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   const bool isTlmDisarmed = config.GetTlm() == TLM_RATIO_DISARMED;
+#else
+  const bool isTlmDisarmed = false;
+#endif
   uint32_t SyncInterval = (connectionState == connected && !isTlmDisarmed) ? ExpressLRS_currAirRate_RFperfParams->SyncPktIntervalConnected : ExpressLRS_currAirRate_RFperfParams->SyncPktIntervalDisconnected;
   bool skipSync = InBindingMode ||
     // TLM_RATIO_DISARMED keeps sending sync packets even when armed until the RX stops sending telemetry and the TLM=Off has taken effect
@@ -580,16 +608,20 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
         otaPkt.full.data_ul.packageIndex = DataUlSender.GetCurrentPayload(
           otaPkt.full.data_ul.payload,
           sizeof(otaPkt.full.data_ul.payload));
+#if defined(TARGET_TX) && !defined(TARGET_RX)
         if (config.GetLinkMode() == TX_MAVLINK_MODE)
           otaPkt.full.data_ul.stubbornAck = DataDlReceiver.GetCurrentConfirm();
+#endif
       }
       else
       {
         otaPkt.std.data_ul.packageIndex = DataUlSender.GetCurrentPayload(
           otaPkt.std.data_ul.payload,
           sizeof(otaPkt.std.data_ul.payload));
+#if defined(TARGET_TX) && !defined(TARGET_RX)
         if (config.GetLinkMode() == TX_MAVLINK_MODE)
           otaPkt.std.data_ul.stubbornAck = DataDlReceiver.GetCurrentConfirm();
+#endif
       }
 
       // send channel data next so the channel messages also get sent during data uplink transmissions
@@ -732,8 +764,10 @@ static void UARTconnected()
   webserverPreventAutoStart = true;
   rfModeLastChangedMS = millis(); // force syncspam on first packets
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   auto index = adjustPacketRateForBaud(config.GetRate());
   config.SetRate(index);
+#endif
   if (connectionState == noCrossfire || connectionState < MODE_STATES)
   {
     // When CRSF first connects, always go into a brief delay before
@@ -749,6 +783,7 @@ void ResetPower()
 {
   // Dynamic Power starts at MinPower unless armed
   // (user may be turning up the power while flying and dropping the power may compromise the link)
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   if (config.GetDynamicPower())
   {
     if (!isArmed)
@@ -762,10 +797,11 @@ void ResetPower()
       POWERMGNT::setPower((PowerLevels_e)config.GetPower());
     }
   }
-  else
+#else
   {
     POWERMGNT::setPower((PowerLevels_e)config.GetPower());
   }
+#endif
   // TLM interval is set on the next SYNC packet
 }
 
@@ -773,19 +809,23 @@ static void ChangeRadioParams()
 {
   ModelUpdatePending = false;
   ResetPower(); // Call before SetRFLinkRate(). The LR1121 Radio lib can now set the correct output power in Config().
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   SetRFLinkRate(config.GetRate());
+#endif
   LbtEnableIfRequired();
 }
 
 void ModelUpdateReq()
 {
   // Force synspam with the current rate parameters in case already have a connection established
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   if (config.SetModelId(crsfTransmitter.modelId))
   {
     syncSpamCounter = syncSpamAmount;
     syncSpamCounterAfterRateChange = syncSpamAmountAfterRateChange;
     ModelUpdatePending = true;
   }
+#endif
 
   devicesTriggerEvent(EVENT_MODEL_SELECTED);
 
@@ -1020,7 +1060,9 @@ static void ExitBindingMode()
 
   UARTconnected();
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   SetRFLinkRate(config.GetRate()); //return to original rate
+#endif
 
   DBGLN("Exiting binding mode");
 }
@@ -1039,8 +1081,10 @@ void ProcessMSPPacket(uint32_t now, mspPacket_t *packet)
   {
     if (packet->payload[0] < 48) // Standard 48 channel VTx table size e.g. A, B, E, F, R, L
     {
+#if defined(TARGET_TX) && !defined(TARGET_RX)
       config.SetVtxBand(packet->payload[0] / 8 + 1);
       config.SetVtxChannel(packet->payload[0] % 8);
+#endif
     } else
     {
       return; // Packets containing frequency in MHz are not yet supported.
@@ -1121,20 +1165,24 @@ static void HandleUARTin()
     {
       if (isThisAMavPacket(buf, size))
       {
-        config.SetLinkMode(TX_MAVLINK_MODE);
+#if defined(TARGET_TX) && !defined(TARGET_RX)
+    config.SetLinkMode(TX_MAVLINK_MODE);
+#endif
         UARTconnected();
       }
     }
+#if defined(TARGET_TX) && !defined(TARGET_RX)
     if (config.GetLinkMode() == TX_MAVLINK_MODE)
     {
       uartInputBuffer.lock();
       uartInputBuffer.pushBytes(buf, size);
       uartInputBuffer.unlock();
     }
-    else
+#else
     {
       crsfParser.processBytes(&usbConnector, buf, size);
     }
+#endif
   }
 
   // Backpack serial input
@@ -1149,6 +1197,7 @@ static void HandleUARTin()
       BackpackOrLogStrm->readBytes(buf, size);
 
       // If the TX is in Mavlink mode, push the bytes into the fifo buffer
+#if defined(TARGET_TX) && !defined(TARGET_RX)
       if (config.GetLinkMode() == TX_MAVLINK_MODE)
       {
         uartInputBuffer.lock();
@@ -1165,12 +1214,14 @@ static void HandleUARTin()
           }
         }
       }
+#endif
 
       // Try to parse any MSP packets from the Backpack
       ParseMSPData(buf, size);
     }
   }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   if (config.GetLinkMode() == TX_MAVLINK_MODE)
   {
     // Use DataUlSender for MAVLINK uplink data
@@ -1191,6 +1242,7 @@ static void HandleUARTin()
       DataUlSender.SetDataToTransmit(nextPayload, nextPlayloadSize);
     }
   }
+#endif
 }
 
 static void setupSerial()
@@ -1381,7 +1433,12 @@ static void checkSendLinkStatsToHandset(uint32_t now)
   }
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void setup()
+#elif defined(TARGET_TX) && defined(TARGET_RX)
+void setupTxLink()
+#endif
+#if defined(TARGET_TX)
 {
   if (setupHardwareFromOptions())
   {
@@ -1479,7 +1536,12 @@ void setup()
   }
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void loop()
+#elif defined(TARGET_TX) && defined(TARGET_RX)
+void loopTxLink()
+#endif
+#if defined(TARGET_TX)
 {
   uint32_t now = millis();
 
@@ -1570,3 +1632,6 @@ void loop()
     otaConnector.pumpSender();
   }
 }
+#endif // defined(TARGET_TX)
+#endif // TARGET_TX outer
+#endif

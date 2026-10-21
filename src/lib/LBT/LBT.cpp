@@ -202,9 +202,8 @@ SX12XX_Radio_Number_t ICACHE_RAM_ATTR LbtChannelIsClear(SX12XX_Radio_Number_t ra
   SX12XX_Radio_Number_t clearChannelsMask = SX12XX_Radio_NONE;
   const int8_t rssiCutOff = PowerEnumToLBTLimit(POWERMGNT::currPower(), ExpressLRS_currAirRate_Modparams->radio_type);
 
-#if defined(RADIO_LR1121) || defined(RADIO_LR2021)
+#if defined(RADIO_SX128X) && !defined(RADIO_SX127X)
   Radio.StartRssiInst(radioNumber);
-#endif
   if (radioNumber & SX12XX_Radio_1)
   {
     // If using dualband, radio1 is always SubGHz and no CCA is required.
@@ -228,7 +227,7 @@ SX12XX_Radio_Number_t ICACHE_RAM_ATTR LbtChannelIsClear(SX12XX_Radio_Number_t ra
     {
         clearChannelsMask |= SX12XX_Radio_2;
     }
-  }
+#endif
 
   // Useful to debug if and how long the rssi wait is, and rssi threshold rssiCutOff
   // if (clearChannelsMask != radioNumber)

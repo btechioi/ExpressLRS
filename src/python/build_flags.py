@@ -146,13 +146,10 @@ build_flags.append("-DTARGET_NAME=" + re.sub("_VIA_.*", "", target_name))
 condense_flags()
 
 if '-DRADIO_SX127X=1' in build_flags or '-DRADIO_LR1121=1' in build_flags or '-DRADIO_LR2021=1' in build_flags:
-    # disallow setting 2400s for 900
-    if '-DRADIO_SX127X=1' in build_flags and \
-            (fnmatch.filter(build_flags, '*-DRegulatory_Domain_ISM_2400') or
-             fnmatch.filter(build_flags, '*-DRegulatory_Domain_EU_CE_2400')):
-        print_error('Regulatory_Domain 2400 not compatible with RADIO_SX127X')
-
-    # require a domain be set for 900
+    # Both the 900 MHz and the 2400 MHz drivers may be compiled together
+    # (dual-band operation), so both regulatory domains may be set.
+    # require a domain be set for 900 (and for the 2400 MHz driver when
+    # both drivers are compiled together)
     if not fnmatch.filter(build_flags, '*-DRegulatory_Domain*'):
         print_error('Please define a Regulatory_Domain in user_defines.txt')
 

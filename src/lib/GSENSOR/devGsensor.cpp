@@ -44,6 +44,7 @@ static int timeout()
 
         system_quiet_state = gsensor.getSystemState();
         //When system is idle, set power to minimum
+#if defined(TARGET_TX) && !defined(TARGET_RX)
         if(config.GetMotionMode() == 1)
         {
             if((system_quiet_state == GSENSOR_SYSTEM_STATE_QUIET) && (system_quiet_pre_state == GSENSOR_SYSTEM_STATE_MOVING) && !isArmed)
@@ -55,6 +56,7 @@ static int timeout()
                 POWERMGNT::setPower((PowerLevels_e)config.GetPower());
             }
         }
+#endif
         system_quiet_pre_state = system_quiet_state;
         lastIdleCheckMs = now;
     }

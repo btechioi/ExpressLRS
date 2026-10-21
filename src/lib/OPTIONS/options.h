@@ -39,10 +39,16 @@ typedef struct _options {
 #endif
 #if defined(TARGET_TX) || defined(UNIT_TEST)
     uint32_t    tlm_report_interval;
-    bool        _unused1:1;
     bool        unlock_higher_power:1;
-    bool        is_airport:1;
+#if !defined(TARGET_RX)
+    bool        _unused1:1;
+#endif
+#if !defined(TARGET_RX)
+    is_airport:1;
+#endif
+#if !defined(TARGET_RX)
     uint32_t    uart_baud;              // only use for airport
+#endif
 #endif
 } __attribute__((packed)) firmware_options_t;
 

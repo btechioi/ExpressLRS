@@ -89,6 +89,7 @@ void DynamicPower_Update(uint32_t now)
   }
 
   // When not using dynamic power, return here
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   if (!config.GetDynamicPower())
   {
     // if RSSI is dropped enough, inc power back to the configured power
@@ -98,6 +99,7 @@ void DynamicPower_Update(uint32_t now)
     }
     return;
   }
+#endif
 
   //
   // The rest of the codes should be executeded only if dynamic power config is enabled
@@ -105,7 +107,11 @@ void DynamicPower_Update(uint32_t now)
 
   // =============  DYNAMIC_POWER_BOOST: Switch-triggered power boost up ==============
   // Or if telemetry is lost while armed (done up here because dynpower_updated is only updated on telemetry)
+#if defined(TARGET_TX) && !defined(TARGET_RX)
   uint8_t boostChannel = config.GetBoostChannel();
+#else
+  uint8_t boostChannel = 0;
+#endif
   if ((connectionState == disconnected && isArmed) ||
     (boostChannel && (CRSF_to_BIT(ChannelData[AUX9 + boostChannel - 1]) == 0)))
   {

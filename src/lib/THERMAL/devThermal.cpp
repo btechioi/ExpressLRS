@@ -54,7 +54,7 @@ static bool initialize()
 
 static void timeoutThermal()
 {
-#if defined(TARGET_TX)
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 #if !defined(PLATFORM_ESP32_S3)
     if(OPT_HAS_THERMAL_LM75A)
 #endif
@@ -76,7 +76,7 @@ static void timeoutThermal()
 #endif
 }
 
-#if defined(TARGET_TX) && defined(PLATFORM_ESP32)
+#if defined(TARGET_TX) && !defined(TARGET_RX) && defined(PLATFORM_ESP32)
 static void setFanSpeed()
 {
     const uint8_t defaultFanSpeeds[] = {
@@ -118,7 +118,7 @@ static void timeoutFan()
     {
         if (fanShouldBeOn)
         {
-#if defined(TARGET_TX) && defined(PLATFORM_ESP32)
+#if defined(TARGET_TX) && !defined(TARGET_RX) && defined(PLATFORM_ESP32)
             if (GPIO_PIN_FAN_PWM != UNDEF_PIN)
             {
                 static PowerLevels_e lastPower = MinPower;
@@ -220,7 +220,7 @@ static int start()
 
 static int event()
 {
-#if defined(TARGET_TX)
+#if defined(TARGET_TX) && !defined(TARGET_RX)
     if (OPT_HAS_THERMAL_LM75A && GPIO_PIN_SCL != UNDEF_PIN && GPIO_PIN_SDA != UNDEF_PIN)
     {
 #ifdef HAS_SMART_FAN

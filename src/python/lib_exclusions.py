@@ -26,12 +26,22 @@ LIBRARY_EXCLUSIONS = {
     "RX": {
         "*": ("ADC","Backpack","BLE","GSENSOR","Handset","POWER_DETECT","SCREEN","tx-crsf","VTX"),
         "esp8266": ("VTXSPI",),
+    },
+    # Both link roles are compiled into one image (BOTHBANDS_* envs).  Keep
+    # every library that either role needs and drop only what no role builds
+    # for the MCU.  The ESP32-C3 targets have no display or IMU (SCREEN and
+    # GSENSOR are excluded for TX/esp32c3 and for every RX), and U8g2/GFX come
+    # in via the TX common lib_deps, so they must be ignored explicitly.
+    "BOTH": {
+        "esp32c3": ("GFX Library for Arduino","U8g2","GSENSOR","SCREEN"),
     }
 }
 
 
 def get_target_type(target_name):
     target_parts = target_name.upper().split("_")
+    if "BOTHBANDS" in target_parts:
+        return "BOTH"
     return next((target for target in ("RX", "TX") if target in target_parts), None)
 
 

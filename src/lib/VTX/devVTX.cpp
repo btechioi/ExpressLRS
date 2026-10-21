@@ -42,6 +42,7 @@ void VtxTriggerSend()
     devicesTriggerEvent(EVENT_VTX_CHANGE);
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void VtxPitmodeSwitchUpdate()
 {
     if (config.GetVtxPitmode() <= PITMODE_ON)
@@ -66,6 +67,7 @@ void VtxPitmodeSwitchUpdate()
         sendEepromWrite = false;
     }
 }
+#endif
 
 static void eepromWriteToMSPOut()
 {
@@ -76,6 +78,7 @@ static void eepromWriteToMSPOut()
     crsfRouter.AddMspMessage(&packet, CRSF_ADDRESS_FLIGHT_CONTROLLER, CRSF_ADDRESS_CRSF_TRANSMITTER);
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static void VtxConfigToMSPOut()
 {
     DBGLN("Sending VtxConfig");
@@ -101,6 +104,7 @@ static void VtxConfigToMSPOut()
         MSP::sendPacket(&packet, BackpackOrLogStrm); // send to tx-backpack as MSP
     }
 }
+#endif
 
 static bool initialize()
 {
@@ -112,6 +116,7 @@ static bool initialize()
     return true;
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static int event()
 {
     // 0 = VTX Admin disabled in the configuration
@@ -136,7 +141,9 @@ static int event()
 
     return DURATION_IGNORE;
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static int timeout()
 {
     if (VtxSendState == VTXSS_DEBOUNCING)
@@ -185,7 +192,9 @@ static int timeout()
 
     return DURATION_NEVER;
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 device_t VTX_device = {
     .initialize = initialize,
     .start = nullptr,
@@ -193,3 +202,4 @@ device_t VTX_device = {
     .timeout = timeout,
     .subscribe = EVENT_CONNECTION_CHANGED | EVENT_VTX_CHANGE
 };
+#endif

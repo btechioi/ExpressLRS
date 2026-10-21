@@ -6,6 +6,7 @@
 extern Stream *BackpackOrLogStrm;
 extern Stream *TxUSB;
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void TXUSBConnector::forwardMessage(const crsf_header_t *message)
 {
     if (TxUSB != BackpackOrLogStrm && config.GetLinkMode() != TX_MAVLINK_MODE)
@@ -14,6 +15,7 @@ void TXUSBConnector::forwardMessage(const crsf_header_t *message)
         TxUSB->write((uint8_t *)message, length);
     }
 }
+#endif
 
 uint8_t TXUSBConnector::GetMaxPacketBytes() const
 {

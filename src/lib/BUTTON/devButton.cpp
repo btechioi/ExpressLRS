@@ -43,9 +43,8 @@ size_t button_GetActionCnt()
 static void handlePress(uint8_t button, bool longPress, uint8_t count)
 {
     DBGLN("handlePress(%u, %u, %u)", button, (uint8_t)longPress, count);
-#if defined(TARGET_TX)
+#if defined(TARGET_TX) && !defined(TARGET_RX)
     const button_action_t *button_actions = config.GetButtonActions(button)->val.actions;
-#endif
     for (unsigned i=0 ; i<button_GetActionCnt() ; i++)
     {
         if (button_actions[i].action != ACTION_NONE && button_actions[i].pressType == longPress && button_actions[i].count == count-1)
@@ -56,6 +55,19 @@ static void handlePress(uint8_t button, bool longPress, uint8_t count)
             }
         }
     }
+#else
+    // RX-only builds use the button_actions array declared at the top of this file
+    for (unsigned i=0 ; i<button_GetActionCnt() ; i++)
+    {
+        if (button_actions[i].action != ACTION_NONE && button_actions[i].pressType == longPress && button_actions[i].count == count-1)
+        {
+            if (actions[button_actions[i].action])
+            {
+                actions[button_actions[i].action]();
+            }
+        }
+    }
+#endif
 }
 
 static bool initialize()

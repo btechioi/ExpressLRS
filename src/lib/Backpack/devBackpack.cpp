@@ -196,6 +196,7 @@ static uint8_t GetDvrDelaySeconds(const uint8_t index)
     return delays[index >= sizeof(delays) ? 0 : index];
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static void BackpackDvrRecordingStateMSPOut(bool recordingState)
 {
     uint16_t delay = 0;
@@ -219,6 +220,7 @@ static void BackpackDvrRecordingStateMSPOut(bool recordingState)
 
     MSP::sendPacket(&packet, BackpackOrLogStrm); // send to tx-backpack as MSP
 }
+#endif
 
 static void BackpackBinding()
 {
@@ -239,6 +241,7 @@ static void BackpackBinding()
  *          Process as many values as there are payload bytes available
  *          A value of HT_DO_NOT_UPDATE will not overwrite that channel
  */
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void processPanTiltRollPacket(const uint32_t now, const mspPacket_t *packet)
 {
     unsigned chStart = (config.GetPTRStartChannel() == HT_START_EDGETX) ? 0 : (config.GetPTRStartChannel() - HT_START_AUX1 + AUX1);
@@ -261,6 +264,7 @@ void processPanTiltRollPacket(const uint32_t now, const mspPacket_t *packet)
 
     lastPTRValidTimeMs = now;
 }
+#endif
 
 static void headtrackPublishChannelsToEdgeTX()
 {
@@ -306,6 +310,7 @@ void headtrackOverrideChannels(uint32_t channels[], size_t channelCount)
     }
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static void BackpackPollAuxStates()
 {
     // HeadTracking Enable
@@ -352,7 +357,9 @@ static void BackpackPollAuxStates()
         }
     }
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void sendCRSFTelemetryToBackpack(const uint8_t *data)
 {
     if (config.GetBackpackDisable() || config.GetBackpackTlmMode() == BACKPACK_TELEM_MODE_OFF || config.GetLinkMode() == TX_MAVLINK_MODE)
@@ -379,7 +386,9 @@ void sendCRSFTelemetryToBackpack(const uint8_t *data)
 
     MSP::sendPacket(&packet, BackpackOrLogStrm); // send to tx-backpack as MSP
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void sendMAVLinkTelemetryToBackpack(const uint8_t *data)
 {
     if (config.GetBackpackDisable() || config.GetBackpackTlmMode() == BACKPACK_TELEM_MODE_OFF)
@@ -391,7 +400,9 @@ void sendMAVLinkTelemetryToBackpack(const uint8_t *data)
     const uint8_t count = data[1];
     BackpackOrLogStrm->write(data + CRSF_FRAME_NOT_COUNTED_BYTES, count);
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static void sendConfigToBackpack()
 {
     // Send any config values to the tx-backpack, as one key/value pair per MSP msg
@@ -403,6 +414,7 @@ static void sendConfigToBackpack()
     packet.addByte(config.GetBackpackTlmMode());
     MSP::sendPacket(&packet, BackpackOrLogStrm); // send to tx-backpack as MSP
 }
+#endif
 
 static bool initialize()
 {
@@ -427,11 +439,14 @@ static bool initialize()
     return true;
 }
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static int start()
 {
     return config.GetBackpackDisable() ? DURATION_NEVER : DURATION_IMMEDIATELY;
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static int timeout()
 {
     static uint8_t versionRequestTries = 0;
@@ -474,7 +489,9 @@ static int timeout()
 
     return BACKPACK_PERIOD_MS;
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 static int event()
 {
     const bool disabled = config.GetBackpackDisable() || connectionState == bleJoystick || connectionState == wifiUpdate;
@@ -501,7 +518,9 @@ static int event()
 
     return disabled ? DURATION_NEVER : BACKPACK_PERIOD_MS;
 }
+#endif
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 device_t Backpack_device = {
     .initialize = initialize,
     .start = start,
@@ -509,4 +528,5 @@ device_t Backpack_device = {
     .timeout = timeout,
     .subscribe = EVENT_CONNECTION_CHANGED | EVENT_CONFIG_MAIN_CHANGED | EVENT_ENTER_BIND_MODE
 };
+#endif
 #endif

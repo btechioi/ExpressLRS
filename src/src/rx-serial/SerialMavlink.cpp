@@ -1,4 +1,4 @@
-#if defined(TARGET_RX)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
 
 #include "SerialMavlink.h"
 #include "OTA.h"

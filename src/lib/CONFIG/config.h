@@ -207,9 +207,10 @@ private:
 #endif
 };
 
+#if defined(TARGET_TX)
 extern TxConfig config;
-
 #endif
+#endif // defined(TARGET_TX)
 
 ///////////////////////////////////////////////////
 
@@ -343,6 +344,13 @@ private:
     uint32_t    m_modified;
 };
 
+#if defined(TARGET_TX)
+// Both-roles build: RX instance gets a distinct name so TX 'config' can coexist
+extern RxConfig rxConfig;
+#else
 extern RxConfig config;
+// RX-only build: alias so RX sources can always refer to the RX instance as rxConfig
+#define rxConfig config
+#endif
 
 #endif

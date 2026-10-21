@@ -310,7 +310,7 @@ static int blinkyUpdate() {
                     striprgb->ClearTo(RgbColor(0), 0, pixelCount-1);
                 }
             }
-            #if defined(TARGET_TX)
+            #if defined(TARGET_TX) && !defined(TARGET_RX)
             setButtonColors(config.GetButtonActions(0)->val.color, config.GetButtonActions(1)->val.color);
             #endif
             if (OPT_WS2812_IS_GRB)
@@ -390,7 +390,7 @@ static int start()
     // Only do the blinkies if it was NOT a software reboot
     if (esp_reset_reason() == ESP_RST_SW) {
         blinkyState = NORMAL;
-        #if defined(TARGET_TX)
+        #if defined(TARGET_TX) && !defined(TARGET_RX)
         setButtonColors(config.GetButtonActions(0)->val.color, config.GetButtonActions(1)->val.color);
         #endif
         return NORMAL_UPDATE_INTERVAL;

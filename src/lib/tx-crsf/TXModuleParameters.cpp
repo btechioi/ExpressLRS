@@ -317,7 +317,9 @@ static stringParameter luaBackpackVersion = {
 
 //---------------------------- BACKPACK ------------------
 
+#if !defined(TARGET_RX)
 extern TxConfig config;
+#endif
 extern void VtxTriggerSend();
 extern void ResetPower();
 extern uint8_t adjustPacketRateForBaud(uint8_t rate);
@@ -328,6 +330,7 @@ extern bool TxBackpackWiFiReadyToSend;
 extern bool VRxBackpackWiFiReadyToSend;
 extern void setWifiUpdateMode();
 
+#if defined(TARGET_TX) && !defined(TARGET_RX)
 void TXModuleEndpoint::supressCriticalErrors()
 {
     // clear the critical error bits of the warning flags
@@ -1046,3 +1049,4 @@ void TXModuleEndpoint::updateParameters()
   }
   updateFolderNamesAndVisibility();
 }
+#endif

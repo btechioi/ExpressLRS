@@ -74,6 +74,10 @@
 #define PACKET_TO_TOCK_SLACK 200 // Desired buffer time between Packet ISR and Tock ISR
 ///////////////////
 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+// RX-only globals (not used when both roles compiled)
+#elif defined(TARGET_RX)
+// Both link roles compiled: define RX globals; TX globals are in tx_main.cpp
 device_affinity_t ui_devices[] = {
   {&Serial0_device, 1},
 #if defined(PLATFORM_ESP32)
@@ -101,7 +105,11 @@ uint8_t geminiMode = 0;
 PFD PFDloop;
 Crc2Byte ota_crc;
 ELRS_EEPROM eeprom;
+#if defined(TARGET_RX) && !defined(TARGET_TX)
 RxConfig config;
+#elif defined(TARGET_RX) && defined(TARGET_TX)
+RxConfig config; // defined here (TX has TxConfig in tx_main)
+#endif
 
 CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
@@ -313,7 +321,7 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
     bool invertIQ = bindMode || (UID[5] & 0x01);
 
     uint32_t interval = ModParams->interval;
-#if defined(DEBUG_FREQ_CORRECTION) && defined(RADIO_SX128X)
+#if defined(DEBUG_FREQ_CORRECTION) && defined(RADIO_SX128X) && !defined(RADIO_SX127X)
     interval = interval * 12 / 10; // increase the packet interval by 20% to allow adding packet header
 #endif
 
@@ -326,7 +334,7 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
 
     Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, FHSSgetInitialFreq(),
                  ModParams->PreambleLen, invertIQ, ModParams->PayloadLength
-#if defined(RADIO_SX128X)
+#if defined(RADIO_SX128X) && !defined(RADIO_SX127X) && !defined(RADIO_SX127X)
                  , OtaGetUidSeed(), OtaCrcInitializer, ModParams->radio_type
 #elif defined(RADIO_LR1121)
                  , ModParams->radio_type, (uint8_t)UID[5], (uint8_t)UID[4]
@@ -856,7 +864,12 @@ void ICACHE_RAM_ATTR TentativeConnection(unsigned long now)
     // Use this rate as the initial rate next time if we connected on it
     config.SetRateInitialIdx(ExpressLRS_nextAirRateIndex);
     // And stop counting toward binding mode
-    if (config.GetPowerOnCounter() != 0)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPowerOnCounter()
+#else
+(0)
+#endif != 0)
     {
         config.SetPowerOnCounter(0);
     }
@@ -954,7 +967,12 @@ static void ICACHE_RAM_ATTR ProcessRfPacket_DataUl(OTA_Packet_s const * const ot
         packageIndex = otaPktPtr->full.data_ul.packageIndex;
         payload = otaPktPtr->full.data_ul.payload;
         dataLen = sizeof(otaPktPtr->full.data_ul.payload);
-        if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+        if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK)
         {
             DataDlSender.ConfirmCurrentPayload(otaPktPtr->full.data_ul.stubbornAck);
         }
@@ -964,7 +982,12 @@ static void ICACHE_RAM_ATTR ProcessRfPacket_DataUl(OTA_Packet_s const * const ot
         packageIndex = otaPktPtr->std.data_ul.packageIndex;
         payload = otaPktPtr->std.data_ul.payload;
         dataLen = sizeof(otaPktPtr->std.data_ul.payload);
-        if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+        if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK)
         {
             DataDlSender.ConfirmCurrentPayload(otaPktPtr->std.data_ul.stubbornAck);
         }
@@ -1050,7 +1073,12 @@ static bool ICACHE_RAM_ATTR ProcessRfPacket_SYNC(uint32_t const now, OTA_Sync_s 
     {
         config.SetSerialProtocol(PROTOCOL_MAVLINK);
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK)
     {
         config.SetSerialProtocol(PROTOCOL_CRSF);
     }
@@ -1083,7 +1111,13 @@ static bool ICACHE_RAM_ATTR ProcessRfPacket_SYNC(uint32_t const now, OTA_Sync_s 
     }
 
     // modelId = 0xff indicates modelMatch is disabled, the XOR does nothing in that case
-    uint8_t modelXor = (~config.GetModelId()) & MODELMATCH_MASK;
+    uint8_t modelXor = (~
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetModelId()
+#else
+(0)
+#endif
+) & MODELMATCH_MASK;
     bool modelMatched = otaSync->UID5 == (UID[5] ^ modelXor);
     DBGVLN("MM %u=%u %d", otaSync->UID5, UID[5], modelMatched);
 
@@ -1253,7 +1287,12 @@ void DataUlReceiveComplete()
         break;
     case MSP_ELRS_MAVLINK_TLM: // 0xFD
         // raw mavlink data
-        if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+        if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK)
         {
             ((SerialMavlink *)serialIO)->forwardMessage(DataUlBuffer);
         }
@@ -1293,43 +1332,113 @@ static void setupSerial()
         serialIO = new SerialNOOP();
         return;
     }
-    if (config.GetSerialProtocol() == PROTOCOL_CRSF || config.GetSerialProtocol() == PROTOCOL_INVERTED_CRSF || firmwareOptions.is_airport)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_CRSF || 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_INVERTED_CRSF || firmwareOptions.is_airport)
     {
         serialBaud = firmwareOptions.uart_baud;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_SBUS || config.GetSerialProtocol() == PROTOCOL_INVERTED_SBUS || config.GetSerialProtocol() == PROTOCOL_DJI_RS_PRO)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_SBUS || 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_INVERTED_SBUS || 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_DJI_RS_PRO)
     {
         sbusSerialOutput = true;
         serialBaud = 100000;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_SUMD)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_SUMD)
     {
         sumdSerialOutput = true;
         serialBaud = 115200;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK)
     {
         mavlinkSerialOutput = true;
         serialBaud = 460800;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_MSP_DISPLAYPORT)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MSP_DISPLAYPORT)
     {
         serialBaud = 115200;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_HOTT_TLM)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_HOTT_TLM)
     {
         hottTlmSerial = true;
         serialBaud = 19200;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_SCORPION_TLM)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_SCORPION_TLM)
     {
         serialBaud = 38400;
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_GPS)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_GPS)
     {
         serialBaud = 115200;
     }
-    bool invert = config.GetSerialProtocol() == PROTOCOL_SBUS || config.GetSerialProtocol() == PROTOCOL_INVERTED_CRSF || config.GetSerialProtocol() == PROTOCOL_DJI_RS_PRO;
+    bool invert = 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_SBUS || 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_INVERTED_CRSF || 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_DJI_RS_PRO;
 
 #if defined(PLATFORM_ESP8266)
     SerialConfig serialConfig = SERIAL_8N1;
@@ -1385,11 +1494,21 @@ static void setupSerial()
     {
         serialIO = new SerialMavlink(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_MSP_DISPLAYPORT)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MSP_DISPLAYPORT)
     {
         serialIO = new SerialDisplayport(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_GPS)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_GPS)
     {
         // Serial(0) is always assigned in a way that it uses two pins, only Serial1 is allowed to not have both RX/TX
         const int8_t gpsTxPin = (GPIO_PIN_RCSIGNAL_TX == UNDEF_PIN) ? U0TXD_GPIO_NUM : GPIO_PIN_RCSIGNAL_TX;
@@ -1399,7 +1518,12 @@ static void setupSerial()
     {
         serialIO = new SerialHoTT_TLM(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
-    else if (config.GetSerialProtocol() == PROTOCOL_SCORPION_TLM)
+    else if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_SCORPION_TLM)
     {
         serialIO = new SerialScorpion_TLM(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
@@ -1442,7 +1566,17 @@ static void setupSerial1()
     {
         for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
         {
-            if (config.GetPwmChannel(ch)->val.mode == somSerial1RX)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+            if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPwmChannel(ch)
+#else
+(0)
+#endif
+->val.mode == somSerial1RX)
+#else
+            if (false)
+#endif
                 serial1RXpin = GPIO_PIN_PWM_OUTPUTS[ch];
         }
     }
@@ -1453,12 +1587,28 @@ static void setupSerial1()
     {
         for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
         {
-            if (config.GetPwmChannel(ch)->val.mode == somSerial1TX)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+            if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPwmChannel(ch)
+#else
+(0)
+#endif
+->val.mode == somSerial1TX)
+#else
+            if (false)
+#endif
                 serial1TXpin = GPIO_PIN_PWM_OUTPUTS[ch];
         }
     }
 
-    switch(config.GetSerial1Protocol())
+    switch(
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerial1Protocol()
+#else
+(0)
+#endif
+)
     {
         case PROTOCOL_SERIAL1_OFF:
             break;
@@ -1545,24 +1695,52 @@ void reconfigureSerial()
 static void setupConfigAndPocCheck()
 {
     eeprom.Begin();
+#if defined(TARGET_RX) && !defined(TARGET_TX)
     config.SetStorageProvider(&eeprom); // Pass pointer to the Config class for access to storage
     config.Load();
+#endif
 
     // If bound, track number of plug/unplug cycles to go to binding mode in eeprom
-    if (config.GetIsBound() && config.GetPowerOnCounter() < 3)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetIsBound()
+#else
+(0)
+#endif && 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPowerOnCounter()
+#else
+(0)
+#endif < 3)
+#else
+    if (false && false < 3)
+#endif
     {
-        config.SetPowerOnCounter(config.GetPowerOnCounter() + 1);
+        config.SetPowerOnCounter(
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPowerOnCounter()
+#else
+(0)
+#endif + 1);
         config.Commit();
     }
 
     // Set a deferred function to clear the power on counter if the RX has been running for more than 2s
+#if defined(TARGET_RX) && !defined(TARGET_TX)
     deferExecutionMillis(2000, []() {
-        if (connectionState != connected && config.GetPowerOnCounter() != 0)
+        if (connectionState != connected && 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPowerOnCounter()
+#else
+(0)
+#endif != 0)
         {
             config.SetPowerOnCounter(0);
             config.Commit();
         }
     });
+#endif
 }
 
 static void setupTarget()
@@ -1585,13 +1763,33 @@ static void setupBindingFromConfig()
 {
     // VolatileBind's only function is to prevent loading the stored UID into RAM
     // which makes the RX boot into bind mode every time
-    if (config.GetIsBound())
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetIsBound()
+#else
+(0)
+#endif
+)
     {
-        memcpy(UID, config.GetUID(), UID_LEN);
+        memcpy(UID, 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetUID()
+#else
+(0)
+#endif
+, UID_LEN);
     }
+#endif
 
     DBGLN("UID=(%u, %u, %u, %u, %u, %u) ModelId=%u",
-        UID[0], UID[1], UID[2], UID[3], UID[4], UID[5], config.GetModelId());
+        UID[0], UID[1], UID[2], UID[3], UID[4], UID[5], 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetModelId()
+#else
+(0)
+#endif
+);
 
     OtaUpdateCrcInitFromUid();
 }
@@ -1604,7 +1802,7 @@ static void setupRadio()
 #if defined(RADIO_SX127X)
     //Radio.currSyncWord = UID[3];
     bool init_success = Radio.Begin();
-#elif defined(RADIO_SX128X)
+#elif defined(RADIO_SX128X) && !defined(RADIO_SX127X)
     bool init_success = Radio.Begin();
 #elif defined(RADIO_LR1121)
     bool init_success = Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
@@ -1624,7 +1822,17 @@ static void setupRadio()
     Radio.RXdoneCallback = &RXdoneISR;
     Radio.TXdoneCallback = &TXdoneISR;
 
-    scanIndex = config.GetRateInitialIdx();
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    scanIndex = 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetRateInitialIdx()
+#else
+(0)
+#endif
+;
+#else
+    scanIndex = 0;
+#endif
     for (int i=0 ; i<RATE_MAX ; i++)
     {
         if (isSupportedRFRate(scanIndex))
@@ -1694,7 +1902,13 @@ static void EnterBindingMode()
     }
 
     // never enter binding mode if binding is supposed to only be administered through the web UI
-    if (config.GetBindStorage() == BINDSTORAGE_ADMINISTERED) {
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetBindStorage()
+#else
+(0)
+#endif == BINDSTORAGE_ADMINISTERED) {
         return;
     }
 
@@ -1702,6 +1916,9 @@ static void EnterBindingMode()
     // Model can be reloaned immediately by binding now
     config.ReturnLoan();
     config.Commit();
+#else
+    // both modes compiled - skip RX-specific admin binding checks that use RxConfig-only APIs
+#endif
 
     // Binding uses 50Hz, and InvertIQ
     OtaCrcInitializer = OTA_VERSION_ID;
@@ -1784,7 +2001,16 @@ static void updateBindingMode(unsigned long now)
 #endif
 
     // If the power on counter is >=3, enter binding, the counter will be reset after 2s
-    else if (!InBindingMode && config.GetPowerOnCounter() >= 3)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    else if (!InBindingMode && 
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPowerOnCounter()
+#else
+(0)
+#endif >= 3)
+#else
+    else if (!InBindingMode && false)
+#endif
     {
         // Never enter wifi if forced to binding mode
         webserverPreventAutoStart = true;
@@ -1809,11 +2035,17 @@ static void updateBindingMode(unsigned long now)
             // Skip entering bind mode if on loan. This comes from an OTA request
             // and the model is assumed to be inaccessible, do not want the receiver
             // sitting in a field ready to be bound to anyone within 10km
+#if defined(TARGET_RX) && !defined(TARGET_TX)
             if (config.IsOnLoan())
             {
                 DBGLN("Model was on loan, becoming inert");
+#else
+            {
+#endif
+#if defined(TARGET_RX) && !defined(TARGET_TX)
                 config.ReturnLoan();
                 config.Commit(); // prevents CheckConfigChangePending() re-enabling radio
+#endif
                 Radio.End();
                 // Enter a completely invalid state for a receiver, to prevent wifi or radio enabling
                 setConnectionState(noCrossfire);
@@ -1842,8 +2074,10 @@ void EnterBindingModeSafely()
     if (connectionState == wifiUpdate || connectionState == bleJoystick)
     {
         // Force 3-plug binding mode
+#if defined(TARGET_RX) && !defined(TARGET_TX)
         config.SetPowerOnCounter(3);
         config.Commit();
+#endif
         ESP.restart();
         // Unreachable
     }
@@ -2004,7 +2238,7 @@ void resetConfigAndReboot()
     ESP.restart();
 }
 
-void setup()
+static void setupRxLink()
 {
     if (!options_init())
     {
@@ -2051,7 +2285,17 @@ void setup()
         {
             for (int i = 0 ; i < GPIO_PIN_PWM_OUTPUTS_COUNT ; i++)
             {
-                eServoOutputMode pinMode = (eServoOutputMode)config.GetPwmChannel(i)->val.mode;
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+                eServoOutputMode pinMode = (eServoOutputMode)
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetPwmChannel(i)
+#else
+(0)
+#endif
+->val.mode;
+#else
+                eServoOutputMode pinMode = (eServoOutputMode)0;
+#endif
                 if (pinMode == somSerial)
                 {
                     pwmSerialDefined = true;
@@ -2165,7 +2409,16 @@ void loop()
         DataDlSender.SetDataToTransmit(DataDlBuffer, nextPlayloadSize);
     }
 
-    if (config.GetSerialProtocol() == PROTOCOL_MAVLINK && !DataDlSender.IsActive() && ((SerialMavlink *)serialIO)->GetNextPayload(&nextPlayloadSize, DataDlBuffer))
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+    if (
+#if defined(TARGET_RX) && !defined(TARGET_TX)
+config.GetSerialProtocol()
+#else
+(uint8_t)0
+#endif == PROTOCOL_MAVLINK && !DataDlSender.IsActive() && ((SerialMavlink *)serialIO)->GetNextPayload(&nextPlayloadSize, DataDlBuffer))
+#else
+    if (false && !DataDlSender.IsActive() && nextPlayloadSize < 0)
+#endif
     {
         DataDlSender.SetDataToTransmit(DataDlBuffer, nextPlayloadSize);
     }
@@ -2180,7 +2433,7 @@ void loop()
 }
 
 #if defined(PLATFORM_ESP32_C3)
-[[noreturn]] void loop()
+[[noreturn]] static void loopRxLink()
 {
     // We have to do this dodgy hack because on the C3 the Arduino main loop calls
     // a yield function (vTaskDelay) every 2 seconds, which causes us to lose connection!
@@ -2211,3 +2464,36 @@ void reset_into_bootloader(void)
     setConnectionState(serialUpdate);
 #endif
 }
+
+#if defined(TARGET_RX) && defined(TARGET_TX)
+// Both link halves are compiled into this build: run both in the same
+// setup() and loop().
+// The TX half lives in tx_main.cpp and is declared here because both
+// files are compiled into this build.
+void setupTxLink();
+void loopTxLink();
+
+void setup()
+{
+    setupRxLink();
+    setupTxLink();
+}
+
+void loop()
+{
+    loopRxLink();
+    loopTxLink();
+}
+#elif defined(TARGET_RX)
+// RX-only build: run the RX half
+void setup()
+{
+    setupRxLink();
+}
+
+void loop()
+{
+    loopRxLink();
+}
+#endif // defined(TARGET_RX) || (TARGET_RX && TARGET_TX)
+#endif

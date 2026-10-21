@@ -23,8 +23,7 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {5, -112,  4380, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)}};
 #endif
 
-#if defined(RADIO_SX128X)
-
+#if defined(RADIO_SX128X) && !defined(RADIO_SX127X)
 #include "SX1280Driver.h"
 SX1280Driver Radio;
 
